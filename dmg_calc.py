@@ -1,7 +1,7 @@
 import random
 def generate_dmg(dmg_dice, effects):
     rolls = []
-    for _ in range(5000):
+    for _ in range(100000):
         roll = []
         for die in dmg_dice:
             n = random.randint(1,die)
@@ -17,44 +17,58 @@ def dmg_calc(hit_bonus, dmg_dice, dmg_bonus, ac, *effects):
     on_hit = []
     for roll in rolls:
         on_hit.append(sum(roll) + dmg_bonus)
+    on_hit.sort()
+    on_hit.reverse()
     dmg = []
     hit_die_list = []
-    for i in range(2000):
-        roll = random.randint(1,21)
+    for roll, second, third in itertools.product(range(1, 21), range(1, 21),
+                                                 range(1, 21)):
         if "halfling" in effects:
             if roll == 1:
-                roll = random.randint(1,21)
+                roll = second
                 if "disadvantage" in effects:
-                    roll = min(roll, random.randint(1, 21))
+                    roll = min(roll, third)
                 elif "advantage" in effects:
-                    roll = max(roll, random.randint(1, 21))
+                    roll = max(roll, third)
             else:
                 if "disadvantage" in effects:
-                    new = random.randint(1, 21)
+                    new = second
                     if new == 1:
-                        new = random.randint(1, 21)
+                        new = third
                     roll = min(roll, new)
                 elif "advantage" in effects:
-                    new = random.randint(1, 21)
+                    new = second
                     if new == 1:
-                        new = random.randint(1, 21)
+                        new = third
                     roll = max(roll, new)
         else:
             if "disadvantage" in effects:
-                roll = min(roll, random.randint(1, 21))
+                roll = min(roll, second)
             elif "advantage" in effects:
-                roll = max(roll, random.randint(1, 21))
+                roll = max(roll, third)
         hit_die_list.append(roll)
-    for hit_die in hit_die_list:
+    hit_die_chances = {}
+    for i in range(1, 21):
+        hit_die_chances[i] = hit_die_list.count(i)
+    hits = 0
+    total = 0
+    for hit_die in range(1, 21):
         if hit_die + hit_bonus >= ac:
-            dmg.extend(on_hit.copy())
-        else:
-            dmg.extend([0] * len(on_hit))
-    dmg.sort()
-    mean = sum(dmg)/len(dmg)
-    lq = dmg[round(len(dmg)/4)]
-    median = dmg[round(len(dmg)/2)]
-    uq = dmg[round(len(dmg)*3/4)]
+            hits += hit_die_chances[hit_die]
+        total += hit_die_chances[hit_die]
+    mean = sum(on_hit)/len(on_hit)*hits/total
+    try:
+        lq = on_hit[round(3/4*len(on_hit)*total/hits)]
+    except IndexError:
+        lq = 0
+    try:
+        median = on_hit[round(1/2*len(on_hit)*total/hits)]
+    except IndexError:
+        median = 0
+    try:
+        uq = on_hit[round(1/4*len(on_hit)*total/hits)]
+    except IndexError:
+        uq = 0
     return mean, (lq, median, uq)
 
 import itertools
@@ -66,3 +80,5 @@ for name, modifier in zip(['plain', 'great-weapon-fighter'], [base, gwfighter]):
                                                'great-weapon-fighting',
                                                'advantage'], x):
             print(name, effects, dmg_calc(*modifier, *effects))
+
+print('fireball', dmg_calc(5, [8]*8, 0, 16))
