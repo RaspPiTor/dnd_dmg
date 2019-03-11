@@ -19,8 +19,8 @@ def dmg_calc(hit_bonus, dmg_dice, dmg_bonus, ac, *effects):
         on_hit.append(sum(roll) + dmg_bonus)
     on_hit.sort()
     on_hit.reverse()
-    dmg = []
-    hit_die_list = []
+    hits = 0
+    total = 0
     for roll, second, third in itertools.product(range(1, 21), range(1, 21),
                                                  range(1, 21)):
         if "halfling" in effects:
@@ -46,16 +46,9 @@ def dmg_calc(hit_bonus, dmg_dice, dmg_bonus, ac, *effects):
                 roll = min(roll, second)
             elif "advantage" in effects:
                 roll = max(roll, third)
-        hit_die_list.append(roll)
-    hit_die_chances = {}
-    for i in range(1, 21):
-        hit_die_chances[i] = hit_die_list.count(i)
-    hits = 0
-    total = 0
-    for hit_die in range(1, 21):
-        if hit_die + hit_bonus >= ac:
-            hits += hit_die_chances[hit_die]
-        total += hit_die_chances[hit_die]
+        if roll + hit_bonus >= ac:
+            hits += 1
+        total += 1
     mean = sum(on_hit)/len(on_hit)*hits/total
     try:
         lq = on_hit[round(3/4*len(on_hit)*total/hits)]
