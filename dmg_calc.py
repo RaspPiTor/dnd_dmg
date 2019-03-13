@@ -1,14 +1,18 @@
 import random
 def generate_dmg(dmg_dice, effects):
     rolls = []
-    for _ in range(100000):
-        roll = []
-        for die in dmg_dice:
-            n = random.randint(1,die)
-            if "great-weapon-fighting" in effects and n in [1,2]:
+    if "great-weapon-fighting" in effects:
+        for _ in range(100000):
+            roll = []
+            for die in dmg_dice:
                 n = random.randint(1,die)
-            roll.append(n)
-        rolls.append(roll)
+                if n in [1,2]:
+                    n = random.randint(1,die)
+                roll.append(n)
+            rolls.append(roll)
+    else:
+        for _ in range(100000):
+            rolls.append([random.randint(1, die) for die in dmg_dice])
     return rolls
         
 
@@ -74,4 +78,6 @@ for name, modifier in zip(['plain', 'great-weapon-fighter'], [base, gwfighter]):
                                                'advantage'], x):
             print(name, effects, dmg_calc(*modifier, *effects))
 
-print('fireball', dmg_calc(5, [8]*8, 0, 16))
+print('fireball', dmg_calc(4, [8]*8, 0, 16))
+print('Meteor Swarm', dmg_calc(5, [6]*40, 0, 16))
+print('Undead Swarm', dmg_calc(5, [6]*116, 232, 16))
