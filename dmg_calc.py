@@ -59,20 +59,21 @@ def dmg_calc(hit_bonus, dmg_dice, dmg_bonus, ac, *effects):
         if roll + hit_bonus >= ac:
             hits += 1
         total += 1
-    mean = sum(on_hit)/len(on_hit)*hits/total
-    try:
-        lq = on_hit[round(3/4*len(on_hit)*total/hits)]
-    except IndexError:
-        lq = 0
-    try:
-        median = on_hit[round(1/2*len(on_hit)*total/hits)]
-    except IndexError:
-        median = 0
-    try:
-        uq = on_hit[round(1/4*len(on_hit)*total/hits)]
-    except IndexError:
-        uq = 0
-    return mean, (lq, median, uq)
+    means = []
+    total_length = len(on_hit)*total/hits
+    for i in range(10, -1, -1):
+        start, end = round(i/10*total_length), round((i+1)/10*total_length)
+        means.append(round(sum(on_hit[start:end])/(end-start), 4))
+    mean = sum(on_hit)/total_length
+    std_deviation = 0
+    for i in range(round(total_length)):
+        try:
+            std_deviation += (on_hit[i]-mean) ** 2
+        except IndexError:
+            std_deviation += mean ** 2
+    std_deviation /= round(total_length)
+    std_deviation **= 0.5
+    return means, std_deviation
 
 import itertools
 base = 4, [6, 6], 4, 16
