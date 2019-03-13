@@ -1,8 +1,27 @@
+import itertools
+import functools
 import random
-def generate_dmg(dmg_dice, effects):
+import time
+
+def combine(*dmg, outcomes):
+    if len(dmg) == 0:
+        return [0] * outcomes
+    total = len(dmg[0])
+    for i in dmg[1:]:
+        total *= len(i)
+    if total < outcomes:
+        return map(sum, itertools.product(*dmg))
+    else:
+        for _ in range(outcomes):
+            yield sum(random.choice(i) for i in dmg)
+
+@functools.lru_cache(maxsize=32)
+def generate_dmg(dmg_dice, effects, outcomes):
+    if len(dmg_dice) == 0:
+        return [[0]]
     rolls = []
     if "great-weapon-fighting" in effects:
-        for _ in range(100000):
+        for _ in range(outcomes):
             roll = []
             for die in dmg_dice:
                 n = random.randint(1,die)
@@ -14,16 +33,16 @@ def generate_dmg(dmg_dice, effects):
         total = dmg_dice[0]
         for i in dmg_dice[1:]:
             total *= i
-        if total < 100000:
+        if total < outcomes:
             rolls = list(itertools.product(*[range(1, i+1) for i in dmg_dice]))
         else:
-            for _ in range(100000):
+            for _ in range(outcomes):
                 rolls.append([random.randint(1, die) for die in dmg_dice])
     return rolls
         
-
-def dmg_calc(hit_bonus, dmg_dice, dmg_bonus, ac, *effects):
-    rolls = generate_dmg(dmg_dice, effects)
+@functools.lru_cache(maxsize=32)
+def dmg_calc(hit_bonus, dmg_dice, dmg_bonus, ac, effects, outcomes):
+    rolls = generate_dmg(dmg_dice, effects, outcomes)
     on_hit = []
     for roll in rolls:
         on_hit.append(sum(roll) + dmg_bonus)
@@ -59,32 +78,49 @@ def dmg_calc(hit_bonus, dmg_dice, dmg_bonus, ac, *effects):
         if roll + hit_bonus >= ac:
             hits += 1
         total += 1
+    hits_to_add = round(outcomes/total*hits)
+    reformed_losses = outcomes - hits_to_add
+    output = []
+    while hits_to_add > len(on_hit):
+        output.extend(on_hit)
+        hits_to_add -= len(on_hit)
+    for _ in range(hits_to_add):
+        output.append(random.choice(on_hit))
+    output.extend([0] * reformed_losses)
+    return output
+
+def clean(output, outcomes, n=10):
+    output.sort()
     means = []
-    total_length = len(on_hit)*total/hits
-    for i in range(10, -1, -1):
-        start, end = round(i/10*total_length), round((i+1)/10*total_length)
-        means.append(round(sum(on_hit[start:end])/(end-start), 4))
-    mean = sum(on_hit)/total_length
-    std_deviation = 0
-    for i in range(round(total_length)):
-        try:
-            std_deviation += (on_hit[i]-mean) ** 2
-        except IndexError:
-            std_deviation += mean ** 2
-    std_deviation /= round(total_length)
-    std_deviation **= 0.5
-    return means, std_deviation
+    for i in range(n):
+        start, end = round(i/n*outcomes), round((i+1)/n*outcomes)
+        means.append(round(sum(output[start:end])/(end-start), 2))
+    return round(sum(means)/n, 2), means
 
-import itertools
-base = 4, [6, 6], 4, 16
-gwfighter = -1, [6,6], 14, 16
-for name, modifier in zip(['plain', 'great-weapon-fighter'], [base, gwfighter]):
-    for x in range(4):
-        for effects in itertools.combinations(['halfling',
-                                               'great-weapon-fighting',
-                                               'advantage'], x):
-            print(name, effects, dmg_calc(*modifier, *effects))
 
-print('fireball', dmg_calc(4, [8]*8, 0, 16))
-print('Meteor Swarm', dmg_calc(5, [6]*40, 0, 16))
-print('Undead Swarm', dmg_calc(5, [6]*116, 232, 16))
+def attack_calc(ac, *attacks, outcomes=100000, n=10, timeslice=0.1):
+    if n > outcomes:
+        return ValueError
+    dmg = []
+    total_work = outcomes * 2
+    for i, (hit_bonus, dmg_dice, dmg_bonus, effects) in enumerate(attacks):
+        dmg.append(dmg_calc(hit_bonus, dmg_dice, dmg_bonus, ac, effects,
+                            outcomes))
+        yield False, i*outcomes/len(attacks), total_work, None
+    start = time.time()
+    combined = []
+    for i, new in enumerate(combine(*dmg, outcomes=outcomes)):
+        combined.append(new)
+        if time.time() - start > timeslice:
+            yield False, i + outcomes, total_work, None
+            start = time.time()
+        
+    yield True, total_work, total_work, clean(combined, outcomes, n)
+            
+
+
+if __name__ == '__main__':
+    print('Polearm + great_weapon_fighter', attack_calc(16,[4, [8], 4],
+                                                        [-1, [4], 14], outcomes=100))
+                                                             
+    print('1d4 x 1d4', attack_calc(0,[0, [4], 0],[0, [4], 0], outcomes=1, n=10))
