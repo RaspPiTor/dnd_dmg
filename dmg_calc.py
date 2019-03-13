@@ -11,8 +11,14 @@ def generate_dmg(dmg_dice, effects):
                 roll.append(n)
             rolls.append(roll)
     else:
-        for _ in range(100000):
-            rolls.append([random.randint(1, die) for die in dmg_dice])
+        total = dmg_dice[0]
+        for i in dmg_dice[1:]:
+            total *= i
+        if total < 100000:
+            rolls = list(itertools.product(*[range(1, i+1) for i in dmg_dice]))
+        else:
+            for _ in range(100000):
+                rolls.append([random.randint(1, die) for die in dmg_dice])
     return rolls
         
 
