@@ -100,7 +100,8 @@ class GUIAttacks(ttk.Frame):
         for i in self.attacks:
             hit_bonus, dmg_dice, dmg_bonus, attack_count, effects = i.get_attack()
             for _ in range(attack_count):
-                attacks.append((hit_bonus, dmg_dice, dmg_bonus, effects))
+                if dmg_dice:
+                    attacks.append((hit_bonus, dmg_dice, dmg_bonus, effects))
         return attacks
     
 
@@ -139,7 +140,6 @@ class GUI(ttk.Frame):
                 done, value, maximum, result = next(self.dmg_calc)
                 self.progress['value'] = value
                 self.progress['maximum'] = maximum
-                print(value, maximum)
                 if done:
                     print(result)
             except StopIteration:
