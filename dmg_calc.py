@@ -51,8 +51,7 @@ def generate_rolls(die, number):
         for i in range(0, len(tables), 2):
             if len(tables[i:i+2]) == 2:
                 new.append(combine_tables(tables[i], tables[i+1]))
-                if tables[i] != tables[i+1]:
-                    yield False, ()
+                yield False, ()
             else:
                 new.append(tables[i])
         tables = new
