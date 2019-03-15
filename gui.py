@@ -46,11 +46,14 @@ class GUIAttack():
                 dmg_dice.append(int(die))
         dmg_dice.sort()
         dmg_dice = tuple(dmg_dice)
-        self.dmg_dice.delete(0, 'end')
-        self.dmg_dice.insert(0,
-                             ' '.join('%sd%s'
-                                      % (dmg_dice.count(i), i)
-                                      for i in sorted(set(dmg_dice))))
+        new = ' '.join('%sd%s' % (dmg_dice.count(i), i)
+                       for i in sorted(set(dmg_dice)))
+        if self.dmg_dice.get() != new:
+            self.dmg_dice.delete(0, 'end')
+            self.dmg_dice.insert(0,
+                                 ' '.join('%sd%s'
+                                          % (dmg_dice.count(i), i)
+                                          for i in sorted(set(dmg_dice))))
         try:
             dmg_bonus = int(self.dmg_bonus.get())
         except ValueError:
@@ -64,7 +67,6 @@ class GUIAttack():
             self.attack_count.insert(0, '1')
             attack_count = 1
         effects = self.effects.get()
-        print(effects)
         return hit_bonus, dmg_dice, dmg_bonus, attack_count, effects
         
 
@@ -116,37 +118,51 @@ class GUI(ttk.Frame):
         self.attacks.grid(row=1, column=0, columnspan=5)
         self.button = ttk.Button(self, text='Calculate', command=self.calculate)
         self.button.grid(row=2, columnspan=4)
-        self.running_calc = False
         self.progress = ttk.Progressbar(self)
         self.progress.grid(row=0, column=6, sticky='nesw')
         self.dmg_calc = iter(())
+        self.background = False
+        self.running_calc = False
+        self.current_hash = 0
         self.refresh()
-    def calculate(self):
+    def calculate(self, background=False):
         try:
             ac = int(self.ac.get())
         except ValueError:
-            self.ac.delete(0, 'end')
-            self.ac.insert(0, '10')
+            if not background:
+                self.ac.delete(0, 'end')
+                self.ac.insert(0, '10')
             ac = 10
         attacks = self.attacks.get_attacks()
-        if self.running_calc == False:
+        if hash((ac, tuple(attacks))) == self.current_hash:
+            self.background = background
+            return
+        if self.running_calc == False or self.background:
+            self.current_hash = hash((ac, tuple(attacks)))
+            self.background = background
+            if not background:
+                self.progress['value'] = 0
+                self.progress['maximum'] = 1
             self.running_calc = True
             self.dmg_calc = dmg_calc.attack_calc(ac, *attacks)
-            self.button['state'] = 'disabled'
+            if not background:
+                self.button['state'] = 'disabled'
             
     def refresh(self):
         if self.running_calc:
             try:
                 done, value, maximum, result = next(self.dmg_calc)
-                self.progress['value'] = value
-                self.progress['maximum'] = maximum
-                if done:
-                    print(result)
+                if not self.background:
+                    self.progress['value'] = value
+                    self.progress['maximum'] = maximum
+                    if done:
+                        print(result)
             except StopIteration:
                 del self.dmg_calc
                 self.running_calc = False
                 self.button['state'] = 'normal'
-        
+        else:
+            self.calculate(True)
         self.after(10, self.refresh)
 gui = GUI()
 gui.grid()
