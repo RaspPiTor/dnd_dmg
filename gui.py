@@ -168,3 +168,4 @@ class GUI(ttk.Frame):
         self.after(10, self.refresh)
 gui = GUI()
 gui.grid()
+gui.mainloop()
