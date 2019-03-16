@@ -3,80 +3,110 @@ import functools
 import time
 import math
 
-@functools.lru_cache(maxsize=32)
-def clean(table):
-    minn, content = table
-    content = list(content)
-    while content[0] == 0:
-        del content[0]
-        minn += 1
-    while content[-1] == 0:
-        del content[-1]
-    found = True
-    while found:
-        found = False
-        try:
-            smallest = min(x for x in content if x not in (0,1))
-            for i in range(2, int(math.sqrt(smallest))):
-                if all(x % i == 0 for x in content):
-                    found = True
-                    for z in range(len(content)):
-                        content[z] //= i
-                    break
-            if not found:
-                 if all(x % smallest == 0 for x in content):
-                    found = True
-                    for z in range(len(content)):
-                        content[z] //= smallest
-        except ValueError:
-            break
-    return minn, tuple(content)
-    
-
-@functools.lru_cache(maxsize=32)
-def combine_tables(table1, table2):
+def combine_tables(table1, table2, cache={}):
+    if (table1, table2) in cache:
+        yield True, cache[(table1, table2)], 1, 1
+        return
     minn = table1[0] + table2[0]
     result = [0]*((len(table1[1]) + len(table2[1])) - 1)
-    
-    for i1, x1 in enumerate(table1[1]):
-        for i2, x2 in enumerate(table2[1]):
-            result[i1+i2] += x1 * x2
-    return (minn, tuple(result))
+    if table1 == table2:
+        table = table1
+        for i1, x1 in enumerate(table[1]):
+            for i2, x2 in zip(range(i1, len(table[1])), table[1][i1:]):
+                if i1 == i2:
+                    result[i1+i2] += x1 * x2
+                else:
+                    result[i1+i2] += x1 * x2 * 2
+            if len(table[1]) > 500:
+                yield False, (), i1, len(table1[1])
+    else:
+        for i1, x1 in enumerate(table1[1]):
+            for i2, x2 in enumerate(table2[1]):
+                result[i1+i2] += x1 * x2
+            if len(table2[1]) > 100:
+                yield False, (), i1, len(table1[1])
+    if len(cache) > 128:
+        cache.clear()
+    cache[(table1, table2)] = (minn, tuple(result))
+    yield True, (minn, tuple(result)), 1, 1
 
-def generate_rolls(die, number):
-    base = (1, tuple([1]*die))
-    tables = [base] * number
+def combine_iter(tables):
+    total_work = len(tables)
     while len(tables) > 1:
         new = []
-        for i in range(0, len(tables), 2):
-            if len(tables[i:i+2]) == 2:
-                new.append(combine_tables(tables[i], tables[i+1]))
-                yield False, ()
-            else:
-                new.append(tables[i])
+        singles = []
+        duplicates = []
+        for table in set(tables):
+            count = tables.count(table)
+            if count > 1:
+                duplicates.append((table, count//2))
+            if count % 2 == 1:
+                singles.append(table)
+        next_length = (len(tables) - len(singles))//2 + min(len(singles), 1)
+        amount_of_work = len(tables) - next_length
+        already_done = total_work - len(tables)
+        progress = 0
+        for table, count in duplicates:
+            progress += count
+            now = already_done + progress/amount_of_work
+            for done, result, value, maximum in combine_tables(table, table):
+                if done:
+                    new.extend([result] * count)
+                yield False, (), now + value/maximum, total_work
+        if singles:
+            for i in range(len(singles) - 1):
+                progress += 1
+                now = already_done + progress/amount_of_work
+                combine_singles_iter = combine_tables(singles[-1], singles[-2])
+                for done, result, value, maximum in combine_singles_iter:
+                    if done:
+                        del singles[-1]
+                        singles[-1] = result
+                    yield False, (), now + value/maximum, total_work
+            if singles:
+                new.append(singles[0])
         tables = new
-        yield False, ()
-    yield True, tables[0]
-    
+        if len(tables) != next_length:
+            print(len(tables), next_length)
+    yield True, tables[0], 1, 1
 
-def generate_dmg(dmg_bonus, dmg_dice, effects):
+def generate_rolls(die, number, cache={}):
+    if (die, number) in cache:
+        yield True, cache[(die, number)], 1, 1
+        return
+    base = (1, tuple([1]*die))
+    tables = [base] * number
+    for done, result, value, maximum in combine_iter(tables):
+        if done:
+            if len(cache) > 128:
+                cache.clear()
+            cache[(die, number)] = result
+        yield done, result, value, maximum
+
+
+def generate_dmg(dmg_bonus, dmg_dice, effects, cache={}):
+    if (dmg_bonus, dmg_dice, effects) in cache:
+        yield True, cache[(dmg_bonus, dmg_dice, effects)], 1, 1
+        return
     if len(dmg_dice) == 0:
-        return (0, ())
+        yield True, (0, ()), 1, 1
+        return
     tables = []
-    for die in set(dmg_dice):
-        for done, result in generate_rolls(die, dmg_dice.count(die)):
+    total_work = len(set(dmg_dice)) * 2
+    for i, die in enumerate(set(dmg_dice)):
+        count = dmg_dice.count(die)
+        for done, result, value, maximum in generate_rolls(die, count):
             if done:
                 minn, content = result
                 tables.append((minn + dmg_bonus, content))
-                print('Added')
-            yield False, ()
-    if len(tables) == 0:
-        print(dmg_bonus, dmg_dice, effects, set(dmg_dice))
-    table = tables[0]
-    for t in tables[1:]:
-        table = combine_tables(table, t)
-        yield False, ()
-    yield True, table
+            yield False, (), i + value/maximum, total_work
+    progress = len(set(dmg_dice))
+    for done, result, value, maximum in combine_iter(tables):
+        if done:
+            if len(cache) > 128:
+                cache.clear()
+            cache[(dmg_bonus, dmg_dice, effects)] = result
+        yield done, result, progress + value/maximum * progress, total_work
 
 @functools.lru_cache(maxsize=32)
 def generate_hits(hit_bonus, ac, effects):
@@ -121,16 +151,15 @@ def generate_hits(hit_bonus, ac, effects):
                 found = True
                 break
     return hits, misses
-        
+
 
 def dmg_calc(hit_bonus, dmg_dice, dmg_bonus, ac, effects):
     dmg_iter = generate_dmg(dmg_bonus, dmg_dice, effects)
-    for done, result in dmg_iter:
+    for done, result, value, maximum in dmg_iter:
         if done:
             minn, on_hit = result
-        yield False, ()
+        yield False, (), value, maximum
     hits, misses = generate_hits(hit_bonus, ac, effects)
-    yield False, ()
     on_hit = list(on_hit)
     old_sum = sum(on_hit)
     for i in range(len(on_hit)):
@@ -138,8 +167,7 @@ def dmg_calc(hit_bonus, dmg_dice, dmg_bonus, ac, effects):
     if minn > 0:
         on_hit[:0] = [0] * minn
     on_hit[0] = misses*old_sum
-    yield False, ()
-    yield True, clean((0, tuple(on_hit)))
+    yield True, (0, tuple(on_hit)), 1, 1
 
 def gen_stats(table, n=10):
     minn, contents = table
@@ -156,34 +184,29 @@ def gen_stats(table, n=10):
     return mean, chunks
 
 
-def attack_calc(ac, *attacks, n=10, timeslice=0.05):
+def attack_calc(ac, *attacks, n=10, timeslice=0.1):
     if not attacks:
         return iter(())
     start = time.time()
     tables = []
-    total_work = len(set(attacks)) + len(attacks)
-    amount_done = 0
-    for i, (hit_bonus, dmg_dice, dmg_bonus, effects) in enumerate(attacks):
+    unique = set(attacks)
+    total_work = len(unique) + len(attacks)
+    
+    for i, (hit_bonus, dmg_dice, dmg_bonus, effects) in enumerate(unique):
         dmg_iter = dmg_calc(hit_bonus, dmg_dice, dmg_bonus, ac, effects)
-        for done, result in dmg_iter:
-            if done:
-                if result not in tables:
-                    amount_done += 1
-                tables.append(result)
+        for done, result, value, maximum in dmg_iter:
             if time.time() - start > timeslice:
-                yield False, amount_done, total_work, None
+                yield False, i + value/maximum, total_work, None
                 start = time.time()
-    yield False, len(attacks), total_work, None
-    while len(tables) > 1:
-        new = []
-        for i in range(0, len(tables), 2):
-            if len(tables[i:i+2]) == 2:
-                new.append(combine_tables(tables[i], tables[i+1]))
-                amount_done += 1
-                if time.time() - start > timeslice:
-                    yield False, amount_done, total_work, None
-                    start = time.time()
-            else:
-                new.append(tables[i])
-        tables = new
-    yield True, total_work, total_work, gen_stats(tables[0], n)
+            if done:
+                tables.extend([result] * attacks.count(
+                    (hit_bonus, dmg_dice, dmg_bonus, effects)))
+    progress = len(unique)
+    yield False, progress, total_work, None
+    for done, result, value, maximum, in combine_iter(tables):
+        if done:
+            yield True, total_work, total_work, gen_stats(result, n)
+        else:
+            if time.time() - start > timeslice:
+                yield False, progress + value/maximum * progress, total_work, None
+                start = time.time()

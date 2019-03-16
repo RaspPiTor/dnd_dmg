@@ -134,9 +134,9 @@ class GUI(ttk.Frame):
                 self.ac.insert(0, '10')
             ac = 10
         attacks = self.attacks.get_attacks()
-        if hash((ac, tuple(attacks))) == self.current_hash:
-            self.background = background
-            return
+        if background:
+            if hash((ac, tuple(attacks))) == self.current_hash:
+                return
         if self.running_calc == False or self.background:
             self.current_hash = hash((ac, tuple(attacks)))
             self.background = background
@@ -155,6 +155,8 @@ class GUI(ttk.Frame):
                 if not self.background:
                     self.progress['value'] = value
                     self.progress['maximum'] = maximum
+                    if value > maximum:
+                        print('Too high value: %s %s' % (value, maximum))
                     if done:
                         print(result)
             except StopIteration:
